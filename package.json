@@ -1,0 +1,12 @@
+{
+  "name": "geto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Codebase intelligence monorepo — queryable symbol graphs for AI agents",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "node packages/geto-graph/test.mjs"
+  }
+}

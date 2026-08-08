@@ -1,0 +1,29 @@
+{
+  "name": "geto-graph",
+  "version": "0.1.0",
+  "description": "SQLite + BM25 codebase symbol graph for pi. Query-first reading: search, refs, blast radius.",
+  "type": "module",
+  "keywords": ["pi-package", "codegraph", "symbol-graph", "codebase", "sqlite", "bm25", "tree-sitter"],
+  "license": "MIT",
+  "files": [
+    "index.ts",
+    "src/",
+    "wasm/",
+    "scripts/",
+    "README.md"
+  ],
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.84.1",
+    "typebox": "^1.3.11",
+    "web-tree-sitter": "^0.26.11"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.0"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

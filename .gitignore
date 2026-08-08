@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# per-project codegraph indexes created by the geto-graph extension
+.codegraph/

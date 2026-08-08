@@ -1,0 +1,99 @@
+# geto
+
+Codebase intelligence for AI agents: queryable symbol graphs so agents stop guessing how a codebase is connected — and read only what's necessary.
+
+Built for [pi](https://github.com/earendil-works/pi), the coding agent. `geto-graph` is a [pi package](https://pi.dev/packages) that indexes a codebase into a SQLite + BM25 graph (symbols, calls, imports, type uses, blast radius) and exposes it to the agent as query tools.
+
+## Why
+
+Agents burn tokens and time reading files to figure out structure: *where is this function? who calls it? what imports this module? what breaks if I change it?*
+
+geto answers those in milliseconds with zero file reads:
+
+```sql
+-- BM25 search: locate the symbol
+SELECT ... FROM syms_fts WHERE syms_fts MATCH 'parseOptions*' ORDER BY bm25(syms_fts);
+
+-- Graph: who transitively depends on it (blast radius)
+WITH RECURSIVE blast(id, depth) AS (...);
+```
+
+## Features
+
+- **Symbols with signatures** — functions, classes, methods, interfaces, types, enums; typed signatures (`format_comment(results_path: str)`) so the agent sees call shapes without opening files
+- **Edges** — `imports`, `calls`, `extends`, `implements`, `uses` (type references), resolved to in-repo targets where possible
+- **BM25 full-text search** over symbol names, signatures, and doc comments
+- **Blast radius** — recursive-CTE BFS (reverse/forward, depth-limited, scope-filtered) for impact analysis
+- **Config files** — YAML key paths (`services.web.image`) and Dockerfile instructions, searchable without polluting symbol search
+- **Fast** — tree-sitter WASM at ~5MB/s per file, parse-extract-free keeps memory flat (4000 files ≈ 1MB RSS), incremental reindex is mtime-based (seconds → 9ms)
+- **No native dependencies** — tree-sitter runs as WASM, SQLite is Node's built-in `node:sqlite`
+
+## Quickstart
+
+```bash
+# via pi (npm package)
+pi install npm:geto-graph@0.1.0
+
+# or from source
+npm install
+node packages/geto-graph/scripts/download-grammars.mjs   # fetch tree-sitter .wasm grammars
+ln -s "$PWD/packages/geto-graph" ~/.pi/agent/extensions/geto-graph
+```
+
+Then `/reload` in pi. The index auto-builds on first use in `<project>/.codegraph/index.db` (gitignore it).
+
+### Commands
+
+- `/codegraph status` — index size/freshness
+- `/codegraph reindex [--force] [path]` — incremental or forced rebuild
+
+### Agent tools
+
+| Tool | Purpose |
+|---|---|
+| `codegraph_search` | BM25 symbol search (name/signature/doc) |
+| `codegraph_symbol` | Exact lookup, all definitions across files |
+| `codegraph_refs` | Direct edges in/out: calls, imports, extends, implements, uses |
+| `codegraph_file` | All symbols + imports + config keys of one file |
+| `codegraph_overview` | Per-file symbol counts — the map |
+| `codegraph_blastradius` | BFS impact analysis (reverse/forward, depth, scope) |
+| `codegraph_status` | Index freshness |
+
+## Supported files
+
+| Type | How |
+|---|---|
+| `.ts/.tsx/.js/.jsx/.mts/.cts` | tree-sitter (WASM): symbols + calls + type uses + imports |
+| `.py` | tree-sitter (WASM): defs, classes, methods, typed signatures, docstrings |
+| `.yaml/.yml` | structural key-path scanner |
+| `Dockerfile`/`Containerfile` | instruction scanner |
+
+## Packages
+
+| Package | Purpose |
+|---|---|
+| [geto-graph](./packages/geto-graph) | the pi extension: SQLite + BM25 symbol graph |
+
+## Development
+
+```bash
+npm test                      # indexes a project and runs every query:
+node packages/geto-graph/test.mjs <project-root>
+```
+
+## Architecture
+
+```
+files ──1:N── symbols ──1:N── edges (calls/imports/extends/implements/uses)
+   └─ syms_fts (FTS5/BM25 over name, qualified, signature, doc)
+   └─ config_entries (yaml/dockerfile key paths)
+```
+
+- Identity: `(file_id, qualified, sig_key)` — same name in different files is fine; overloads coexist via normalized signatures
+- Incremental: mtime/size per file, delete-and-reinsert (FK cascade), FTS rebuilt per pass
+- Indexes on both edge endpoints → "who calls X" and "what does X call" are index lookups
+- Blast radius = `WITH RECURSIVE` CTE, cycle-safe via depth cap, external deps are leaves
+
+## License
+
+MIT
