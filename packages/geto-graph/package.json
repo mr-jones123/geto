@@ -5,6 +5,10 @@
   "type": "module",
   "keywords": ["pi-package", "codegraph", "symbol-graph", "codebase", "sqlite", "bm25", "tree-sitter"],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mr-jones123/geto.git"
+  },
   "files": [
     "index.ts",
     "src/",
