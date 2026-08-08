@@ -1,8 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 export const SCHEMA_VERSION = "1";
 
 export function openDb(dbPath: string): DatabaseSync {
+  mkdirSync(dirname(dbPath), { recursive: true }); // DB dir may not exist yet
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
   db.exec(`

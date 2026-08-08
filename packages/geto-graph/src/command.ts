@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { indexProject, DB_DIR, DB_FILE } from "./indexer.ts";
 import { openDb } from "./db.ts";
 
@@ -15,6 +16,10 @@ export function registerCommand(pi: ExtensionAPI) {
       const cmd = parts[0] ?? "status";
       if (cmd === "status") {
         const dbPath = join(ctx.cwd, DB_DIR, DB_FILE);
+        if (!existsSync(dbPath)) {
+          ctx.ui.notify("codegraph: not indexed yet. Run '/codegraph reindex' or use any codegraph_* tool to build the index.", "info");
+          return;
+        }
         const db = openDb(dbPath);
         const t = db.prepare("SELECT (SELECT COUNT(*) FROM files) AS files, (SELECT COUNT(*) FROM symbols) AS symbols, (SELECT COUNT(*) FROM edges) AS edges, (SELECT value FROM meta WHERE key='indexed_at') AS at, (SELECT value FROM meta WHERE key='root') AS root").get() as { files: number; symbols: number; edges: number; at: string | null; root: string | null };
         db.close();
