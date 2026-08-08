@@ -3,11 +3,19 @@
   "version": "0.1.0",
   "description": "SQLite + BM25 codebase symbol graph for pi. Query-first reading: search, refs, blast radius.",
   "type": "module",
-  "keywords": ["pi-package", "codegraph", "symbol-graph", "codebase", "sqlite", "bm25", "tree-sitter"],
+  "keywords": [
+    "pi-package",
+    "codegraph",
+    "symbol-graph",
+    "codebase",
+    "sqlite",
+    "bm25",
+    "tree-sitter"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mr-jones123/geto.git"
+    "url": "git+https://github.com/mr-jones123/geto.git"
   },
   "files": [
     "index.ts",
@@ -28,6 +36,8 @@
     "@earendil-works/pi-coding-agent": ">=0.84.0"
   },
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   }
 }
