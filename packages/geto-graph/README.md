@@ -9,7 +9,7 @@ Part of the [geto monorepo](../../README.md).
 ### Via pi (npm package)
 
 ```bash
-pi install npm:geto-graph@0.1.0
+pi install npm:geto-graph@0.1.2
 ```
 
 ### From source (this monorepo)

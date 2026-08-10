@@ -32,7 +32,7 @@ WITH RECURSIVE blast(id, depth) AS (...);
 
 ```bash
 # via pi (npm package)
-pi install npm:geto-graph@0.1.0
+pi install npm:geto-graph@0.1.2
 
 # or from source
 npm install
