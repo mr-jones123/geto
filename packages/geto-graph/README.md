@@ -21,26 +21,26 @@ ln -s "$PWD/packages/geto-graph" ~/.pi/agent/extensions/geto-graph   # global
 # or: ln -s "$PWD/packages/geto-graph" .pi/extensions/geto-graph      # project-local
 ```
 
-Then `/reload` in pi. The index auto-builds (lazily) on first codegraph tool call for the current project, stored in `<project>/.codegraph/index.db` (add `.codegraph/` to your project's `.gitignore`).
+Then `/reload` in pi. The index auto-builds (lazily) on first `geto_graph_*` tool call for the current project, stored in `<project>/.geto-graph/index.db` (add `.geto-graph/` to your project's `.gitignore`).
 
 Requires pi >= 0.84 (declared as a peer dependency).
 
 ## Commands
 
-- `/codegraph status` — index size/freshness
-- `/codegraph reindex [--force] [path]` — incremental (mtime/size) or forced full reindex
+- `/geto-graph status` — index size/freshness
+- `/geto-graph reindex [--force] [path]` — incremental (mtime/size) or forced full reindex
 
 ## Tools
 
 | Tool | Purpose |
 |---|---|
-| `codegraph_search` | BM25 symbol search (name/signature/doc) |
-| `codegraph_symbol` | Exact lookup, all definitions across files |
-| `codegraph_refs` | Direct edges in/out: calls, imports, extends, implements, uses |
-| `codegraph_file` | All symbols + imports + config keys of one file |
-| `codegraph_overview` | Per-file symbol counts — the map |
-| `codegraph_blastradius` | BFS impact analysis (reverse/forward, depth, scope) |
-| `codegraph_status` | Index freshness |
+| `geto_graph_search` | BM25 symbol search (name/signature/doc) |
+| `geto_graph_symbol` | Exact lookup, all definitions across files |
+| `geto_graph_refs` | Direct edges in/out: calls, imports, extends, implements, uses |
+| `geto_graph_file` | All symbols + imports + config keys of one file |
+| `geto_graph_overview` | Per-file symbol counts — the map |
+| `geto_graph_blastradius` | BFS impact analysis (reverse/forward, depth, scope) |
+| `geto_graph_status` | Index freshness |
 
 ## Supported files
 
@@ -57,5 +57,5 @@ node packages/geto-graph/test.mjs <project-root>   # end-to-end: index + all que
 ## Notes
 
 - Parse-extract-free per file: memory stays flat regardless of repo size (~1MB for 4000 files). Per-file ceiling is ~35MB (wasm32); files over 20MB are skipped.
-- `.codegraph/` should be gitignored.
+- `.geto-graph/` should be gitignored.
 - Requires pi >= 0.84 (declared as a peer dependency).

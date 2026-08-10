@@ -11,7 +11,7 @@ console.log(`\n=== indexed ${s.root} ===`);
 console.log(`${s.filesFound} files | ${s.indexed} indexed | ${s.skipped} skipped | ${s.parseErrors} errors | ${s.durationMs}ms`);
 console.log(`${s.symbols} symbols | ${s.edges} edges | ${s.configEntries} config entries\n`);
 
-const db = openDb(join(root, ".codegraph", "index.db"));
+const db = openDb(join(root, ".geto-graph", "index.db"));
 
 const q = (label, rows) => {
   console.log(`--- ${label} ---`);

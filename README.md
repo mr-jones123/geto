@@ -40,24 +40,24 @@ node packages/geto-graph/scripts/download-grammars.mjs   # fetch tree-sitter .wa
 ln -s "$PWD/packages/geto-graph" ~/.pi/agent/extensions/geto-graph
 ```
 
-Then `/reload` in pi. The index auto-builds on first use in `<project>/.codegraph/index.db` (gitignore it).
+Then `/reload` in pi. The index auto-builds on first use in `<project>/.geto-graph/index.db` (gitignore it).
 
 ### Commands
 
-- `/codegraph status` — index size/freshness
-- `/codegraph reindex [--force] [path]` — incremental or forced rebuild
+- `/geto-graph status` — index size/freshness
+- `/geto-graph reindex [--force] [path]` — incremental or forced rebuild
 
 ### Agent tools
 
 | Tool | Purpose |
 |---|---|
-| `codegraph_search` | BM25 symbol search (name/signature/doc) |
-| `codegraph_symbol` | Exact lookup, all definitions across files |
-| `codegraph_refs` | Direct edges in/out: calls, imports, extends, implements, uses |
-| `codegraph_file` | All symbols + imports + config keys of one file |
-| `codegraph_overview` | Per-file symbol counts — the map |
-| `codegraph_blastradius` | BFS impact analysis (reverse/forward, depth, scope) |
-| `codegraph_status` | Index freshness |
+| `geto_graph_search` | BM25 symbol search (name/signature/doc) |
+| `geto_graph_symbol` | Exact lookup, all definitions across files |
+| `geto_graph_refs` | Direct edges in/out: calls, imports, extends, implements, uses |
+| `geto_graph_file` | All symbols + imports + config keys of one file |
+| `geto_graph_overview` | Per-file symbol counts — the map |
+| `geto_graph_blastradius` | BFS impact analysis (reverse/forward, depth, scope) |
+| `geto_graph_status` | Index freshness |
 
 ## Supported files
 

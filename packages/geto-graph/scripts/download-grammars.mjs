@@ -17,7 +17,7 @@ const GRAMMARS = [
 
 for (const g of GRAMMARS) {
   const api = `https://api.github.com/repos/${g.repo}/releases/latest`;
-  const res = await fetch(api, { headers: { "User-Agent": "codegraph" } });
+  const res = await fetch(api, { headers: { "User-Agent": "geto-graph" } });
   if (!res.ok) { console.error(`!! ${g.repo}: ${res.status} ${res.statusText}`); continue; }
   const release = await res.json();
   console.log(`${g.repo} @ ${release.tag_name}`);

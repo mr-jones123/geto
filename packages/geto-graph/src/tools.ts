@@ -69,15 +69,15 @@ const fmt = (r: SymbolRow) =>
 // ── tools ─────────────────────────────────────────────────────────────────────
 export function registerTools(pi: ExtensionAPI) {
   pi.registerTool({
-    name: "codegraph_search",
-    label: "Codegraph Search",
+    name: "geto_graph_search",
+    label: "Geto Graph Search",
     description:
       "BM25 full-text search over the codebase symbol index (functions, classes, interfaces, types, enums). Returns qualified names, file paths, line numbers and signatures — never file bodies. Use before reading files to locate symbols fast.",
     promptSnippet: "Search indexed codebase symbols by name or keyword (BM25)",
     promptGuidelines: [
-      "Use codegraph_search to locate symbols across the codebase before reading files; the index is always cheaper than guessing paths.",
-      "Use codegraph_symbol for exact lookups and codegraph_blastradius before modifying shared symbols.",
-      "Use codegraph_overview to get a map of the codebase instead of listing directories.",
+      "Use geto_graph_search to locate symbols across the codebase before reading files; the index is always cheaper than guessing paths.",
+      "Use geto_graph_symbol for exact lookups and geto_graph_blastradius before modifying shared symbols.",
+      "Use geto_graph_overview to get a map of the codebase instead of listing directories.",
     ],
     parameters: Type.Object({
       query: Type.String({ description: "Symbol name or keyword, e.g. 'formatDate', 'auth handler', 'parseOptions'" }),
@@ -94,14 +94,14 @@ export function registerTools(pi: ExtensionAPI) {
         name: string; kind: string; fully_qualified: string; signature: string; line_start: number; path: string; score: number;
       }[];
       const lines = rows.map((r) => `${r.name}  [${r.kind}]  ${r.path}:${r.line_start}  ${r.signature || ""}  (score ${r.score.toFixed(2)})`);
-      const text = lines.length ? lines.join("\n") : "No matches. Broader terms may help; run /codegraph status to check the index.";
+      const text = lines.length ? lines.join("\n") : "No matches. Broader terms may help; run /geto-graph status to check the index.";
       return { content: [{ type: "text", text: truncate(text) }], details: { count: rows.length } };
     },
   });
 
   pi.registerTool({
-    name: "codegraph_symbol",
-    label: "Codegraph Symbol",
+    name: "geto_graph_symbol",
+    label: "Geto Graph Symbol",
     description:
       "Exact lookup of a symbol by name (returns all definitions across files — same name in different modules is common). Shows kind, file:line, signature. Optionally filter to one file.",
     promptSnippet: "Look up a symbol exactly (all files)",
@@ -127,8 +127,8 @@ export function registerTools(pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "codegraph_refs",
-    label: "Codegraph Refs",
+    name: "geto_graph_refs",
+    label: "Geto Graph Refs",
     description:
       "Direct graph edges of a symbol: who calls/extends/uses it ('in') or what it calls/uses ('out'). Kinds: calls, imports, extends, implements, uses.",
     promptSnippet: "Find callers/callees and type usages of a symbol",
@@ -175,8 +175,8 @@ export function registerTools(pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "codegraph_file",
-    label: "Codegraph File",
+    name: "geto_graph_file",
+    label: "Geto Graph File",
     description:
       "Everything the index knows about one file: all symbols with lines, import edges, and config keys (yaml/dockerfile). Read this instead of the file when you only need structure.",
     parameters: Type.Object({
@@ -185,7 +185,7 @@ export function registerTools(pi: ExtensionAPI) {
     async execute(_id, params, _signal, _onUpdate, ctx) {
       const db = await ensureIndexed(ctx.cwd);
       const file = db.prepare("SELECT id, path FROM files WHERE path = ?").get(params.path) as { id: number; path: string } | undefined;
-      if (!file) return { content: [{ type: "text", text: `File '${params.path}' not in index. Try codegraph_overview or /codegraph status.` }], details: {} };
+      if (!file) return { content: [{ type: "text", text: `File '${params.path}' not in index. Try geto_graph_overview or /geto-graph status.` }], details: {} };
       const syms = db.prepare("SELECT name, kind, qualified, signature, line_start, is_exported FROM symbols WHERE file_id = ? AND kind != 'module' ORDER BY line_start").all(file.id) as unknown as { name: string; kind: string; qualified: string; signature: string; line_start: number; is_exported: number }[];
       const imports = db.prepare("SELECT to_text, COALESCE(s.fully_qualified, '') AS resolved, e.line FROM edges e LEFT JOIN symbols s ON s.id = e.to_id WHERE e.file_id = ? AND e.kind = 'imports'").all(file.id) as unknown as { to_text: string; resolved: string; line: number }[];
       const cfg = db.prepare("SELECT name, value FROM config_entries WHERE file_id = ? ORDER BY line LIMIT 100").all(file.id) as unknown as { name: string; value: string | null }[];
@@ -205,8 +205,8 @@ export function registerTools(pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "codegraph_overview",
-    label: "Codegraph Overview",
+    name: "geto_graph_overview",
+    label: "Geto Graph Overview",
     description:
       "Map of the codebase: per-file symbol counts (and config-entry counts for yaml/dockerfile). The 'zoom out' tool — use it to decide which files matter before zooming in.",
     promptSnippet: "Get a per-file map of the codebase (symbol counts)",
@@ -240,13 +240,13 @@ export function registerTools(pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "codegraph_blastradius",
-    label: "Codegraph Blast Radius",
+    name: "geto_graph_blastradius",
+    label: "Geto Graph Blast Radius",
     description:
       "Impact analysis over the graph. Reverse: everything that transitively depends on a symbol/file (what breaks if you change it). Forward: everything it depends on. Returns files ranked by proximity with affected-symbol counts.",
     promptSnippet: "Find the blast radius of changing a symbol or file",
     promptGuidelines: [
-      "Run codegraph_blastradius before modifying a shared symbol to see which files and tests are affected.",
+      "Run geto_graph_blastradius before modifying a shared symbol to see which files and tests are affected.",
     ],
     parameters: Type.Object({
       target: Type.String({ description: "Symbol name / qualified name / file path" }),
@@ -302,9 +302,9 @@ export function registerTools(pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "codegraph_status",
-    label: "Codegraph Status",
-    description: "Index freshness and size. Run if a codegraph tool returns empty or stale-looking results.",
+    name: "geto_graph_status",
+    label: "Geto Graph Status",
+    description: "Index freshness and size. Run if a geto_graph tool returns empty or stale-looking results.",
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const db = await ensureIndexed(ctx.cwd);

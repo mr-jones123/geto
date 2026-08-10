@@ -8,7 +8,7 @@ const WASM_CANDIDATES = [
   join(HERE, "..", "wasm"),   // src/../wasm (normal install)
   join(HERE, "wasm"),          // node -e / cjs shim contexts
   join(process.cwd(), "wasm"),
-  join(process.cwd(), "codegraph", "wasm"),
+  join(process.cwd(), "geto-graph", "wasm"),
 ];
 const WASM_DIR = WASM_CANDIDATES.find((p) => existsSync(p)) ?? join(HERE, "..", "wasm");
 

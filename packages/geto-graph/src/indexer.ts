@@ -7,7 +7,7 @@ import { extractTs, type Extraction } from "./extract-ts.ts";
 import { extractPy } from "./extract-py.ts";
 import { scanYaml, scanDockerfile, type ConfigEntry } from "./scanners.ts";
 
-export const DB_DIR = ".codegraph";
+export const DB_DIR = ".geto-graph";
 export const DB_FILE = "index.db";
 
 const SKIP_DIRS = new Set([
