@@ -25,7 +25,7 @@ WITH RECURSIVE blast(id, depth) AS (...);
 - **BM25 full-text search** over symbol names, signatures, and doc comments
 - **Blast radius** — recursive-CTE BFS (reverse/forward, depth-limited, scope-filtered) for impact analysis
 - **Config files** — YAML key paths (`services.web.image`) and Dockerfile instructions, searchable without polluting symbol search
-- **Fast** — tree-sitter WASM at ~5MB/s per file, parse-extract-free keeps memory flat (4000 files ≈ 1MB RSS), incremental reindex is mtime-based (seconds → 9ms)
+- **Fast** — tree-sitter WASM at ~5MB/s per file, parse-extract-free keeps memory flat (4000 files ≈ 1MB RSS), incremental reindex is content-hash based (unchanged files skip in ~1ms)
 - **No native dependencies** — tree-sitter runs as WASM, SQLite is Node's built-in `node:sqlite`
 
 ## Quickstart
@@ -51,6 +51,8 @@ Then `/reload` in pi. The index auto-builds on first use in `<project>/.geto-gra
 
 | Tool | Purpose |
 |---|---|
+| `geto_graph_index` | Incremental refresh — re-parses only files whose content hash changed |
+| `geto_graph_reindex` | Force a full rebuild (re-parse every file) |
 | `geto_graph_search` | BM25 symbol search (name/signature/doc) |
 | `geto_graph_symbol` | Exact lookup, all definitions across files |
 | `geto_graph_refs` | Direct edges in/out: calls, imports, extends, implements, uses |
@@ -90,7 +92,7 @@ files ──1:N── symbols ──1:N── edges (calls/imports/extends/imple
 ```
 
 - Identity: `(file_id, qualified, sig_key)` — same name in different files is fine; overloads coexist via normalized signatures
-- Incremental: mtime/size per file, delete-and-reinsert (FK cascade), FTS rebuilt per pass
+- Incremental: content hash (sha1) per file with a mtime/size fast-path; a touched-but-unchanged file is detected by hash and skipped. Delete-and-reinsert (FK cascade), FTS rebuilt per pass. Hashes for pre-hash indexes are backfilled automatically on the next run.
 - Indexes on both edge endpoints → "who calls X" and "what does X call" are index lookups
 - Blast radius = `WITH RECURSIVE` CTE, cycle-safe via depth cap, external deps are leaves
 

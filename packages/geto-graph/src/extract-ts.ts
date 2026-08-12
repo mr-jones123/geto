@@ -178,6 +178,11 @@ export function extractTs(source: string, parser: Parser, relPath: string): Extr
         return;
       }
       case "method_definition": {
+        // Only class-body methods are declarations. Object-literal methods
+        // (parent = object) share one qualified name and often identical
+        // signatures (e.g. many `execute` handlers in one options object),
+        // which collides on UNIQUE (file_id, qualified, sig_key) — skip them.
+        if (n.parent?.type !== "class_body") return;
         const id = findChild(n, "property_identifier");
         if (!id) return;
         const q = `${enclosing}.${id.text}`;

@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-export const SCHEMA_VERSION = "1";
+export const SCHEMA_VERSION = "2";
 
 export function openDb(dbPath: string): DatabaseSync {
   mkdirSync(dirname(dbPath), { recursive: true }); // DB dir may not exist yet

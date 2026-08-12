@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { join, resolve } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { openDb, readMeta } from "./db.ts";
-import { indexProject, DB_DIR, DB_FILE } from "./indexer.ts";
+import { indexProject, DB_DIR, DB_FILE, type IndexSummary } from "./indexer.ts";
 
 // ── lazy per-project index ────────────────────────────────────────────────────
 let state: { root: string; db: DatabaseSync } | null = null;
@@ -65,6 +65,17 @@ function resolveSymbols(db: DatabaseSync, target: string): SymbolRow[] {
 
 const fmt = (r: SymbolRow) =>
   `${r.name}  [${r.kind}]  ${r.path}:${r.line_start}  ${r.signature || ""}  (${r.fully_qualified})`;
+
+// ── index maintenance ────────────────────────────────────────────────────────
+async function runIndex(cwd: string, force: boolean): Promise<IndexSummary> {
+  const absRoot = resolve(cwd);
+  const dbPath = join(absRoot, DB_DIR, DB_FILE);
+  const s = await indexProject(absRoot, { dbPath, force, quiet: true });
+  // refresh the cached connection so subsequent reads see fresh data
+  state?.db.close();
+  state = { root: absRoot, db: openDb(dbPath) };
+  return s;
+}
 
 // ── tools ─────────────────────────────────────────────────────────────────────
 export function registerTools(pi: ExtensionAPI) {
@@ -298,6 +309,48 @@ export function registerTools(pi: ExtensionAPI) {
       const lines: string[] = [`blast radius (${dirTxt} '${params.target}', scope=${scope}, depth≤${maxDepth}): ${total[0]?.n ?? 0} symbols across ${rows.length}+ files`];
       for (const r of rows) lines.push(`  ${r.depth} hop(s) | ${r.path} | ${r.affected} symbols`);
       return { content: [{ type: "text", text: truncate(lines.join("\n")) }], details: { files: rows.length, totalSymbols: total[0]?.n } };
+    },
+  });
+
+  pi.registerTool({
+    name: "geto_graph_index",
+    label: "Geto Graph Index",
+    description:
+      "Incrementally refresh the codebase symbol index: only files whose content hash changed are re-parsed, everything else is skipped. Run after code changes when you need fresh symbols/edges. Reports indexed/skipped/removed counts.",
+    promptSnippet: "Refresh the symbol index (incremental, hash-based)",
+    promptGuidelines: [
+      "Run geto_graph_index after code changes instead of guessing — it only re-parses files whose content hash changed.",
+      "Use geto_graph_reindex (force) if the index looks corrupt or a schema upgrade changed extraction.",
+    ],
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const t0 = Date.now();
+      const s = await runIndex(ctx.cwd, false);
+      const text = [
+        `indexed ${s.root}`,
+        `${s.filesFound} files found — ${s.indexed} indexed, ${s.skipped} up-to-date, ${s.removed} removed, ${s.parseErrors} errors`,
+        `→ ${s.symbols} symbols, ${s.edges} edges, ${s.configEntries} config entries (${Date.now() - t0}ms)`,
+      ].join("\n");
+      return { content: [{ type: "text", text: truncate(text) }], details: { summary: s } };
+    },
+  });
+
+  pi.registerTool({
+    name: "geto_graph_reindex",
+    label: "Geto Graph Reindex",
+    description:
+      "Force a full rebuild of the codebase index: re-parses every file regardless of hashes. Use when the index looks corrupt, after schema/extractor upgrades, or when incremental indexing missed something.",
+    promptSnippet: "Force a full reindex (all files)",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, ctx) {
+      const t0 = Date.now();
+      const s = await runIndex(ctx.cwd, true);
+      const text = [
+        `rebuilt index for ${s.root}`,
+        `${s.filesFound} files — ${s.indexed} indexed, ${s.skipped} skipped, ${s.removed} removed, ${s.parseErrors} errors`,
+        `→ ${s.symbols} symbols, ${s.edges} edges, ${s.configEntries} config entries (${Date.now() - t0}ms)`,
+      ].join("\n");
+      return { content: [{ type: "text", text: truncate(text) }], details: { summary: s } };
     },
   });
 

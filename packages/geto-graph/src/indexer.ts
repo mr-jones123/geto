@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { readdirSync, statSync, readFileSync, mkdirSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, relative, dirname, extname, basename, resolve, sep } from "node:path";
 import { openDb, rebuildFts, readMeta, writeMeta, SCHEMA_VERSION } from "./db.ts";
 import { getParser } from "./grammars.ts";
@@ -69,7 +70,11 @@ export function discoverFiles(root: string): FileEntry[] {
   return out;
 }
 
-async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: IndexSummary) {
+function sha1Hex(data: Buffer | string): string {
+  return createHash("sha1").update(data).digest("hex");
+}
+
+async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: IndexSummary, buf?: Buffer, hash?: string) {
   const st = statSync(f.abs);
   const lang = f.isDockerfile ? "dockerfile" : LANG_BY_EXT[f.ext].lang;
   const grammar = f.isDockerfile ? null : LANG_BY_EXT[f.ext].grammar;
@@ -78,17 +83,19 @@ async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: 
   db.prepare("DELETE FROM files WHERE path = ?").run(f.rel);
 
   if (st.size > MAX_FILE) {
-    db.prepare("INSERT INTO files (path, language, mtime, size, status, reason, indexed_at) VALUES (?,?,?,?,?,?,?)")
-      .run(f.rel, lang, st.mtimeMs, st.size, "too_large", `file exceeds ${MAX_FILE / 1024 / 1024}MB cap`, Date.now());
+    db.prepare("INSERT INTO files (path, language, mtime, size, hash, status, reason, indexed_at) VALUES (?,?,?,?,?,?,?,?)")
+      .run(f.rel, lang, st.mtimeMs, st.size, null, "too_large", `file exceeds ${MAX_FILE / 1024 / 1024}MB cap`, Date.now());
     stats.skipped++;
     return;
   }
 
-  let src: string;
-  try { src = readFileSync(f.abs, "utf8"); } catch { return; }
+  let srcBuf: Buffer;
+  try { srcBuf = buf ?? readFileSync(f.abs); } catch { return; }
+  const contentHash = hash ?? sha1Hex(srcBuf);
+  const src = srcBuf.toString("utf8");
 
-  const fileId = db.prepare("INSERT INTO files (path, language, mtime, size, status, indexed_at) VALUES (?,?,?,?,?,?)")
-    .run(f.rel, lang, st.mtimeMs, st.size, "indexed", Date.now()).lastInsertRowid as number;
+  const fileId = db.prepare("INSERT INTO files (path, language, mtime, size, hash, status, indexed_at) VALUES (?,?,?,?,?,?,?)")
+    .run(f.rel, lang, st.mtimeMs, st.size, contentHash, "indexed", Date.now()).lastInsertRowid as number;
 
   const insSym = db.prepare(`INSERT INTO symbols (file_id, name, qualified, fully_qualified, kind, signature, sig_key, doc, line_start, line_end, col_start, is_exported, is_local)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
@@ -131,8 +138,10 @@ function insertSymbolsAndEdges(
   insEdge: ReturnType<DatabaseSync["prepare"]>,
   stats: IndexSummary,
 ) {
-  // module symbol for this file
-  insSym.run(fileId, basename(f.rel), f.rel, `${f.rel}::module`, "module", "", "decl", "", 1, 1, 1, 0, 0);
+  // module symbol for this file — capture its id from the insert itself
+  // (no extra SELECT), it's the fallback `from` for every edge
+  const modRes = insSym.run(fileId, basename(f.rel), f.rel, `${f.rel}::module`, "module", "", "decl", "", 1, 1, 1, 0, 0);
+  const mId = modRes.lastInsertRowid as number;
   stats.symbols++;
 
   const qMap = new Map<string, number>();
@@ -146,13 +155,32 @@ function insertSymbolsAndEdges(
     stats.symbols++;
   }
 
-  const moduleId = db.prepare("SELECT id FROM symbols WHERE file_id = ? AND kind = 'module'").get(fileId) as { id: number };
-  const mId = moduleId.id;
   for (const e of ex.edges) {
     const fromId = e.from === f.rel || e.from === "" ? mId : qMap.get(e.from) ?? mId;
     const toId = e.to ? qMap.get(e.to) ?? null : null;
     insEdge.run(fileId, fromId, e.from, e.kind, toId, e.toText, e.line);
     stats.edges++;
+  }
+}
+
+// One-time migration: files indexed before content hashing existed have
+// hash = NULL. Read + hash them (no re-parse) so future runs can skip by hash.
+// No-op once every indexed row carries a hash.
+function backfillHashes(db: DatabaseSync) {
+  const rows = db.prepare("SELECT id, path, size FROM files WHERE hash IS NULL AND status = 'indexed'").all() as { id: number; path: string; size: number }[];
+  if (!rows.length) return;
+  const upd = db.prepare("UPDATE files SET hash = ? WHERE id = ?");
+  db.exec("BEGIN");
+  try {
+    for (const r of rows) {
+      if (r.size > MAX_FILE) continue;
+      let buf: Buffer;
+      try { buf = readFileSync(r.path); } catch { continue; } // GC removes vanished files
+      upd.run(sha1Hex(buf), r.id);
+    }
+    db.exec("COMMIT");
+  } catch {
+    db.exec("ROLLBACK");
   }
 }
 
@@ -171,20 +199,37 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
   writeMeta(db, "root", absRoot);
   writeMeta(db, "indexed_at", String(Date.now()));
 
+  backfillHashes(db); // one-time: files indexed before content hashing existed
+
   const files = discoverFiles(absRoot);
   stats.filesFound = files.length;
+
+  // bulk-load existing rows once — no per-file SELECT in the loop
+  const existing = new Map<string, { mtime: number; size: number; status: string; hash: string | null }>();
+  for (const r of db.prepare("SELECT path, mtime, size, status, hash FROM files").all() as { path: string; mtime: number; size: number; status: string; hash: string | null }[]) existing.set(r.path, r);
+  const updMeta = db.prepare("UPDATE files SET mtime = ?, size = ? WHERE path = ?");
 
   for (const f of files) {
     let st;
     try { st = statSync(f.abs); } catch { continue; }
-    if (!opts.force) {
-      const row = db.prepare("SELECT mtime, size, status FROM files WHERE path = ?").get(f.rel) as { mtime: number; size: number; status: string } | undefined;
-      if (row && row.mtime === st.mtimeMs && row.size === st.size && row.status !== "parse_error") {
+    const row = existing.get(f.rel);
+    if (!opts.force && row && row.mtime === st.mtimeMs && row.size === st.size && row.status !== "parse_error") {
+      // metadata unchanged → content can't differ; cheapest path, no read
+      stats.skipped++;
+      continue;
+    }
+    // metadata says possibly changed → confirm by content hash before re-parsing
+    let buf: Buffer | undefined;
+    let hash: string | undefined;
+    if (!opts.force && row?.hash && st.size <= MAX_FILE) {
+      try { buf = readFileSync(f.abs); hash = sha1Hex(buf); } catch { continue; }
+      if (hash === row.hash && row.status !== "parse_error") {
+        updMeta.run(st.mtimeMs, st.size, f.rel); // touched but unchanged
         stats.skipped++;
         continue;
       }
     }
-    await reindexFile(db, absRoot, f, stats);
+    await reindexFile(db, absRoot, f, stats, buf, hash);
   }
 
   // remove files that disappeared
@@ -196,7 +241,13 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
 
   // resolve cross-file imports: to_id = target module symbol
   const pathToFile = new Map<string, number>();
-  for (const r of db.prepare("SELECT id, path FROM files").all() as { id: number; path: string }[]) pathToFile.set(r.path, r.id);
+  const fileIdToPath = new Map<number, string>();
+  for (const r of db.prepare("SELECT id, path FROM files").all() as { id: number; path: string }[]) {
+    pathToFile.set(r.path, r.id);
+    fileIdToPath.set(r.id, r.path);
+  }
+  const fileIdToModule = new Map<number, number>();
+  for (const r of db.prepare("SELECT file_id, id FROM symbols WHERE kind = 'module'").all() as { file_id: number; id: number }[]) fileIdToModule.set(r.file_id, r.id);
 
   const normalizeRel = (p: string) => {
     const parts = p.split(sep).filter((x) => x && x !== "." && x !== "..");
@@ -247,11 +298,12 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
   const pending = db.prepare("SELECT e.id, e.file_id, e.to_text, f.language FROM edges e JOIN files f ON f.id = e.file_id WHERE e.kind = 'imports' AND e.to_id IS NULL").all() as { id: number; file_id: number; to_text: string; language: string }[];
   const upd = db.prepare("UPDATE edges SET to_id = ? WHERE id = ?");
   for (const e of pending) {
-    const fileRel = (db.prepare("SELECT path FROM files WHERE id = ?").get(e.file_id) as { path: string }).path;
+    const fileRel = fileIdToPath.get(e.file_id);
+    if (fileRel === undefined) continue;
     const fid = resolveImport(dirname(fileRel), e.to_text, e.language);
     if (fid === null) continue;
-    const mod = db.prepare("SELECT id FROM symbols WHERE file_id = ? AND kind = 'module'").get(fid) as { id: number } | undefined;
-    if (mod) upd.run(mod.id, e.id);
+    const mod = fileIdToModule.get(fid);
+    if (mod !== undefined) upd.run(mod, e.id);
   }
 
   rebuildFts(db);
