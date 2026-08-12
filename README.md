@@ -75,6 +75,7 @@ Then `/reload` in pi. The index auto-builds on first use in `<project>/.geto-gra
 | Package | Purpose |
 |---|---|
 | [geto-graph](./packages/geto-graph) | the pi extension: SQLite + BM25 symbol graph |
+| [geto-subagents](./packages/geto-subagents) | tmux-hosted subagents (`/review`, `/find`, `/plan`) with isolated sessions |
 
 ## Development
 

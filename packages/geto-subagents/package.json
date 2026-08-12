@@ -1,0 +1,36 @@
+{
+  "name": "geto-subagents",
+  "version": "0.1.0",
+  "description": "tmux-hosted subagents for pi: /review, /find, /plan. Each subagent runs in its own pi session (a separate leaf) inside a detached tmux session, attachable from any terminal.",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "geto",
+    "subagents",
+    "tmux",
+    "review",
+    "planner",
+    "finder"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mr-jones123/geto.git"
+  },
+  "files": [
+    "index.ts",
+    "agents.ts",
+    "README.md"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.0"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.84.0"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
