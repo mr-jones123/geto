@@ -1,0 +1,47 @@
+---
+name: Publish geto-graph
+
+"on":
+  push:
+    tags:
+      - "geto-graph-v*"
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          expected="${GITHUB_REF_NAME#geto-graph-v}"
+          actual="$(node -p "require('./packages/geto-graph/package.json').version")"
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::tag version ${expected} does not match geto-graph version ${actual}"
+            exit 1
+          fi
+
+      - name: Run geto-graph regression tests
+        run: npm test
+
+      - name: Publish geto-graph to npm
+        working-directory: packages/geto-graph
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

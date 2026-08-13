@@ -1,0 +1,48 @@
+---
+name: Publish geto-subagents
+
+"on":
+  push:
+    tags:
+      - "geto-subagents-v*"
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          expected="${GITHUB_REF_NAME#geto-subagents-v}"
+          actual="$(node -p "require('./packages/geto-subagents/package.json').version")"
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::tag version ${expected} does not match geto-subagents version ${actual}"
+            exit 1
+          fi
+
+      - name: Verify package contents
+        working-directory: packages/geto-subagents
+        run: npm pack --dry-run
+
+      - name: Publish geto-subagents to npm
+        working-directory: packages/geto-subagents
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
