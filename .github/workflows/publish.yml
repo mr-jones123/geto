@@ -19,18 +19,21 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-          cache: npm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
-      # Guard: a vX.Y.Z tag must match BOTH packages' version.
+      # Guard: a vX.Y.Z tag must match ALL packages' version.
       # Manual dispatch (workflow_dispatch) skips this check.
       - name: Verify tag matches package versions
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           expected="${GITHUB_REF_NAME#v}"
-          for pkg in geto-graph geto-subagents; do
+          for pkg in geto-graph geto-subagents geto-goals; do
             actual="$(
               node -p "require('./packages/${pkg}/package.json').version"
             )"
@@ -52,6 +55,12 @@ jobs:
 
       - name: Publish geto-subagents to npm
         working-directory: packages/geto-subagents
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish geto-goals to npm
+        working-directory: packages/geto-goals
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
