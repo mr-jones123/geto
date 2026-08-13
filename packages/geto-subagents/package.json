@@ -1,6 +1,6 @@
 {
   "name": "geto-subagents",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Fork-based tmux-hosted subagents for pi: /review, /find, /plan, /chain, and a generic subagent tool. Each subagent is a detached pi process whose session FORKS the main conversation (full context inherited, child session visible in /resume), reports its result back, and is attachable via pi --attach-subagent <id>.",
   "type": "module",
   "keywords": [
