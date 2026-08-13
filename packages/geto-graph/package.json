@@ -1,6 +1,6 @@
 {
   "name": "geto-graph",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "SQLite + BM25 codebase symbol graph for pi. Query-first reading: search, refs, blast radius.",
   "type": "module",
   "keywords": [
