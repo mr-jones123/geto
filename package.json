@@ -8,5 +8,8 @@
   ],
   "scripts": {
     "test": "node packages/geto-graph/test.mjs"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-tui": "0.84.1"
   }
 }

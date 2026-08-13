@@ -1,18 +1,15 @@
 {
-  "name": "geto-subagents",
-  "version": "0.2.0",
-  "description": "Fork-based tmux-hosted subagents for pi: /review, /find, /plan, /chain, and a generic subagent tool. Each subagent is a detached pi process whose session FORKS the main conversation (full context inherited, child session visible in /resume), reports its result back, and is attachable via pi --attach-subagent <id>.",
+  "name": "geto-goals",
+  "version": "0.1.0",
+  "description": "Durable autonomous goal loop for pi (Codex /goal style). /goal set|show|edit|pause|resume|clear plus a goal_report tool and an agent_settled continuation loop. Goal state lives in .pi/goals/goal.json and is re-injected every turn, so it survives compaction, /new, and restarts.",
   "type": "module",
   "keywords": [
     "pi-package",
     "geto",
-    "subagents",
-    "tmux",
-    "fork",
-    "chain",
-    "review",
-    "planner",
-    "finder"
+    "goals",
+    "autonomous",
+    "loop",
+    "agent"
   ],
   "license": "MIT",
   "repository": {
@@ -21,12 +18,10 @@
   },
   "files": [
     "index.ts",
-    "agents.ts",
     "README.md"
   ],
   "dependencies": {
     "@earendil-works/pi-ai": "^0.84.1",
-    "@earendil-works/pi-tui": "^0.84.1",
     "typebox": "^1.3.11"
   },
   "peerDependencies": {
