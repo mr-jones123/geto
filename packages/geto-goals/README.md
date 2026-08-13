@@ -47,6 +47,10 @@ The goal is **state, not context**: it lives in `<project>/.pi/goals/goal.json`.
 
 The loop also survives `/new` and restarts — the file is per-project, and `agent_settled` restarts it on any session in the project.
 
+## Releases
+
+Versions, changelogs, tags, and npm publication are managed by Release Please from Conventional Commits. Do not edit the package version manually.
+
 ## Notes
 
 - Subagents spawned by geto-subagents run with `GETO_GOALS_DISABLED=1` and are excluded from the loop.

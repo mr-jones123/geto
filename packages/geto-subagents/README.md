@@ -54,6 +54,10 @@ Flags: `--model <id>`, `--no-attach`, `--no-zellij`. A trailing token that looks
 4. The child runs in **child mode** (`PI_TMUX_SUBAGENT_CHILD=1`): on `agent_settled` it writes `result.json` (output, stopReason, session file, model) and shuts down. It also sets `GETO_GOALS_DISABLED=1` so the geto-goals loop does not run inside subagents.
 5. The parent polls `result.json` + `capture-pane` (live preview) until done, then returns the output (50KB/2000-line cap; full transcript in the child session file).
 
+## Releases
+
+Versions, changelogs, tags, and npm publication are managed by Release Please from Conventional Commits. Do not edit the package version manually.
+
 ## Notes
 
 - `pi --attach-subagent <id>` validates the UUID, then `switch-client` (same tmux server) or `attach-session` (elsewhere, `$TMUX` stripped).

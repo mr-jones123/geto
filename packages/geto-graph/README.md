@@ -57,6 +57,10 @@ npm test                                           # isolated regression checks
 npm run test:e2e -- <project-root>                 # index a real project + run all queries
 ```
 
+## Releases
+
+Versions, changelogs, tags, and npm publication are managed by Release Please from Conventional Commits. Do not edit the package version manually.
+
 ## Notes
 
 - Parse-extract-free per file: memory stays flat regardless of repo size (~1MB for 4000 files). Per-file ceiling is ~35MB (wasm32); files over 20MB are skipped.
