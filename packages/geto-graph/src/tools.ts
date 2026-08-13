@@ -67,6 +67,12 @@ const fmt = (r: SymbolRow) =>
   `${r.name}  [${r.kind}]  ${r.path}:${r.line_start}  ${r.signature || ""}  (${r.fully_qualified})`;
 
 // ── index maintenance ────────────────────────────────────────────────────────
+const indexModeLabel = (s: IndexSummary) => s.mode === "initial_index"
+  ? "initial index"
+  : s.mode === "forced_reindex"
+    ? "forced reindex"
+    : "incremental reindex";
+
 async function runIndex(cwd: string, force: boolean): Promise<IndexSummary> {
   const absRoot = resolve(cwd);
   const dbPath = join(absRoot, DB_DIR, DB_FILE);
@@ -327,9 +333,10 @@ export function registerTools(pi: ExtensionAPI) {
       const t0 = Date.now();
       const s = await runIndex(ctx.cwd, false);
       const text = [
-        `indexed ${s.root}`,
-        `${s.filesFound} files found — ${s.indexed} indexed, ${s.skipped} up-to-date, ${s.removed} removed, ${s.parseErrors} errors`,
-        `→ ${s.symbols} symbols, ${s.edges} edges, ${s.configEntries} config entries (${Date.now() - t0}ms)`,
+        `${indexModeLabel(s)} for ${s.root}`,
+        `${s.filesFound} files found — ${s.indexed} indexed, ${s.skipped} up-to-date, ${s.removed} removed, ${s.parseErrors} errors this run`,
+        `→ index contains ${s.totalSymbols} symbols, ${s.totalEdges} edges, ${s.totalConfigEntries} config entries (${s.totalParseErrors} files with errors)`,
+        `→ this run added ${s.symbols} symbols, ${s.edges} edges, ${s.configEntries} config entries (${Date.now() - t0}ms)`,
       ].join("\n");
       return { content: [{ type: "text", text: truncate(text) }], details: { summary: s } };
     },
@@ -346,9 +353,10 @@ export function registerTools(pi: ExtensionAPI) {
       const t0 = Date.now();
       const s = await runIndex(ctx.cwd, true);
       const text = [
-        `rebuilt index for ${s.root}`,
+        `${indexModeLabel(s)} for ${s.root}`,
         `${s.filesFound} files — ${s.indexed} indexed, ${s.skipped} skipped, ${s.removed} removed, ${s.parseErrors} errors`,
-        `→ ${s.symbols} symbols, ${s.edges} edges, ${s.configEntries} config entries (${Date.now() - t0}ms)`,
+        `→ index contains ${s.totalSymbols} symbols, ${s.totalEdges} edges, ${s.totalConfigEntries} config entries (${s.totalParseErrors} files with errors)`,
+        `→ this run added ${s.symbols} symbols, ${s.edges} edges, ${s.configEntries} config entries (${Date.now() - t0}ms)`,
       ].join("\n");
       return { content: [{ type: "text", text: truncate(text) }], details: { summary: s } };
     },

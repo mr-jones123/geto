@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { readdirSync, statSync, readFileSync, mkdirSync } from "node:fs";
+import { readdirSync, statSync, readFileSync, mkdirSync, existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join, relative, dirname, extname, basename, resolve, sep } from "node:path";
 import { openDb, rebuildFts, readMeta, writeMeta, SCHEMA_VERSION } from "./db.ts";
@@ -33,16 +33,25 @@ const LANG_BY_EXT: Record<string, { lang: string; grammar: string }> = {
 
 interface FileEntry { rel: string; abs: string; ext: string; isDockerfile: boolean }
 
+export type IndexMode = "initial_index" | "incremental_reindex" | "forced_reindex";
+
 export interface IndexSummary {
   root: string;
+  mode: IndexMode;
   filesFound: number;
   indexed: number;
   skipped: number;
   removed: number;
   parseErrors: number;
+  /** Symbols, edges, and config entries added by successfully indexed files this run. */
   symbols: number;
   edges: number;
   configEntries: number;
+  /** Current persisted totals after the run completes. */
+  totalSymbols: number;
+  totalEdges: number;
+  totalConfigEntries: number;
+  totalParseErrors: number;
   durationMs: number;
 }
 
@@ -102,6 +111,13 @@ async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: 
   const insEdge = db.prepare("INSERT INTO edges (file_id, from_id, from_text, kind, to_id, to_text, line) VALUES (?,?,?,?,?,?,?)");
   const insCfg = db.prepare("INSERT INTO config_entries (file_id, name, kind, value, line) VALUES (?,?,?,?,?)");
 
+  // Extraction updates the run counters while inserting. Keep a checkpoint so
+  // a rolled-back file does not appear in the successful-work summary.
+  const before = {
+    symbols: stats.symbols,
+    edges: stats.edges,
+    configEntries: stats.configEntries,
+  };
   db.exec("BEGIN");
   try {
     if (grammar === "yaml") {
@@ -123,6 +139,9 @@ async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: 
     stats.indexed++;
   } catch (err) {
     db.exec("ROLLBACK");
+    stats.symbols = before.symbols;
+    stats.edges = before.edges;
+    stats.configEntries = before.configEntries;
     db.prepare("UPDATE files SET status = 'parse_error', reason = ? WHERE id = ?").run(String(err).slice(0, 200), fileId);
     stats.parseErrors++;
   }
@@ -145,13 +164,21 @@ function insertSymbolsAndEdges(
   stats.symbols++;
 
   const qMap = new Map<string, number>();
+  const seen = new Set<string>();
   for (const s of ex.symbols) {
+    // Repeated declarations can occur in separate lexical blocks (especially
+    // tests) but currently resolve to the same graph-qualified name. Preserve
+    // one stable representative instead of rejecting the entire file on the
+    // database UNIQUE(file_id, qualified, sig_key) constraint.
+    const key = `${s.qualified}\0${s.sigKey}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
     const r = insSym.run(
       fileId, s.name, s.qualified, `${f.rel}::${s.qualified}`, s.kind,
       s.signature || "", s.sigKey, s.doc || "", s.lineStart, s.lineEnd,
       s.colStart, s.isExported ? 1 : 0, s.isExported || s.kind === "module" ? 0 : 1,
     );
-    qMap.set(s.qualified, r.lastInsertRowid as number);
+    if (!qMap.has(s.qualified)) qMap.set(s.qualified, r.lastInsertRowid as number);
     stats.symbols++;
   }
 
@@ -166,7 +193,7 @@ function insertSymbolsAndEdges(
 // One-time migration: files indexed before content hashing existed have
 // hash = NULL. Read + hash them (no re-parse) so future runs can skip by hash.
 // No-op once every indexed row carries a hash.
-function backfillHashes(db: DatabaseSync) {
+function backfillHashes(db: DatabaseSync, root: string) {
   const rows = db.prepare("SELECT id, path, size FROM files WHERE hash IS NULL AND status = 'indexed'").all() as { id: number; path: string; size: number }[];
   if (!rows.length) return;
   const upd = db.prepare("UPDATE files SET hash = ? WHERE id = ?");
@@ -175,7 +202,7 @@ function backfillHashes(db: DatabaseSync) {
     for (const r of rows) {
       if (r.size > MAX_FILE) continue;
       let buf: Buffer;
-      try { buf = readFileSync(r.path); } catch { continue; } // GC removes vanished files
+      try { buf = readFileSync(join(root, r.path)); } catch { continue; } // GC removes vanished files
       upd.run(sha1Hex(buf), r.id);
     }
     db.exec("COMMIT");
@@ -186,12 +213,16 @@ function backfillHashes(db: DatabaseSync) {
 
 export async function indexProject(root: string, opts: { dbPath?: string; force?: boolean; quiet?: boolean } = {}): Promise<IndexSummary> {
   const started = Date.now();
-  const stats: IndexSummary = {
-    root, filesFound: 0, indexed: 0, skipped: 0, removed: 0, parseErrors: 0,
-    symbols: 0, edges: 0, configEntries: 0, durationMs: 0,
-  };
   const absRoot = resolve(root);
   const dbPath = opts.dbPath ?? join(absRoot, DB_DIR, DB_FILE);
+  const hadIndex = existsSync(dbPath);
+  const mode: IndexMode = opts.force ? "forced_reindex" : hadIndex ? "incremental_reindex" : "initial_index";
+  const stats: IndexSummary = {
+    root: absRoot, mode, filesFound: 0, indexed: 0, skipped: 0, removed: 0, parseErrors: 0,
+    symbols: 0, edges: 0, configEntries: 0,
+    totalSymbols: 0, totalEdges: 0, totalConfigEntries: 0, totalParseErrors: 0,
+    durationMs: 0,
+  };
   mkdirSync(dirname(dbPath), { recursive: true });
   const db = openDb(dbPath);
 
@@ -199,7 +230,7 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
   writeMeta(db, "root", absRoot);
   writeMeta(db, "indexed_at", String(Date.now()));
 
-  backfillHashes(db); // one-time: files indexed before content hashing existed
+  backfillHashes(db, absRoot); // one-time: files indexed before content hashing existed
 
   const files = discoverFiles(absRoot);
   stats.filesFound = files.length;
@@ -308,8 +339,19 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
 
   rebuildFts(db);
 
-  writeMeta(db, "symbol_count", String(stats.symbols));
-  writeMeta(db, "edge_count", String(stats.edges));
+  const totals = db.prepare(`SELECT
+    (SELECT COUNT(*) FROM symbols) AS symbols,
+    (SELECT COUNT(*) FROM edges) AS edges,
+    (SELECT COUNT(*) FROM config_entries) AS config_entries,
+    (SELECT COUNT(*) FROM files WHERE status = 'parse_error') AS parse_errors
+  `).get() as { symbols: number; edges: number; config_entries: number; parse_errors: number };
+  stats.totalSymbols = totals.symbols;
+  stats.totalEdges = totals.edges;
+  stats.totalConfigEntries = totals.config_entries;
+  stats.totalParseErrors = totals.parse_errors;
+
+  writeMeta(db, "symbol_count", String(stats.totalSymbols));
+  writeMeta(db, "edge_count", String(stats.totalEdges));
   writeMeta(db, "file_count", String(files.length));
   stats.durationMs = Date.now() - started;
   db.close();

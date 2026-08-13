@@ -38,8 +38,9 @@ export function registerCommand(pi: ExtensionAPI) {
           const fresh = db.prepare("SELECT value FROM meta WHERE key='indexed_at'").get() as { value: string };
           db.close();
           ctx.ui.setStatus("geto-graph", "");
+          const mode = s.mode === "initial_index" ? "initial index" : s.mode === "forced_reindex" ? "forced reindex" : "incremental reindex";
           ctx.ui.notify(
-            `geto-graph: ${s.indexed} indexed, ${s.skipped} up-to-date, ${s.removed} removed, ${s.parseErrors} errors — ${s.filesFound} files, ${s.symbols} symbols, ${s.edges} edges (${s.durationMs}ms)`,
+            `geto-graph ${mode}: ${s.indexed} indexed, ${s.skipped} up-to-date, ${s.removed} removed, ${s.parseErrors} errors — index contains ${s.filesFound} files, ${s.totalSymbols} symbols, ${s.totalEdges} edges; added ${s.symbols} symbols and ${s.edges} edges this run (${s.durationMs}ms)`,
             "info",
           );
         } catch (err) {

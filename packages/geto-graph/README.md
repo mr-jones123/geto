@@ -40,6 +40,8 @@ Requires pi >= 0.84 (declared as a peer dependency).
 | `geto_graph_file` | All symbols + imports + config keys of one file |
 | `geto_graph_overview` | Per-file symbol counts — the map |
 | `geto_graph_blastradius` | BFS impact analysis (reverse/forward, depth, scope) |
+| `geto_graph_index` | Incrementally refresh changed files and report additions plus persisted totals |
+| `geto_graph_reindex` | Force a full index rebuild |
 | `geto_graph_status` | Index freshness |
 
 ## Supported files
@@ -51,7 +53,8 @@ Requires pi >= 0.84 (declared as a peer dependency).
 ## Dev
 
 ```bash
-node packages/geto-graph/test.mjs <project-root>   # end-to-end: index + all queries
+npm test                                           # isolated regression checks
+npm run test:e2e -- <project-root>                 # index a real project + run all queries
 ```
 
 ## Notes
