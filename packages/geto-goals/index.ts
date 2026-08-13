@@ -141,6 +141,14 @@ export default function (pi: ExtensionAPI) {
 
   // ── loop: restart while the goal is active and guards allow ────────────────
 
+  // agent_settled is emitted from inside the previous run's finally. Starting the
+  // next run synchronously there nests runs (R1.finally → settled → await R2 → …)
+  // and, once any run aborts, cascades into an infinite abort loop: every aborted
+  // run re-fires settled, which starts a new run that aborts instantly. Continuations
+  // are deferred one macrotask so the previous run fully unwinds first, and the flag
+  // collapses double-settles within the same tick.
+  let continuationScheduled = false;
+
   pi.on("agent_settled", async (_event, ctx) => {
     if (!active()) return;
     const g = await loadGoal(ctx.cwd);
@@ -158,9 +166,15 @@ export default function (pi: ExtensionAPI) {
     g.loop.iterations += 1; // each loop restart counts — caps runaway loops even without goal_report calls
     g.updatedAt = Date.now();
     await saveGoal(ctx.cwd, g);
-    await pi.sendUserMessage(
-      `Continue working toward the active goal. Use goal_report to record progress, completion (done), or a blocker (blocked). Goal state: ${goalPath(ctx.cwd)}`,
-    );
+    if (continuationScheduled) return;
+    continuationScheduled = true;
+    setTimeout(() => {
+      continuationScheduled = false;
+      if (!ctx.isIdle()) return; // the user or another extension started a run meanwhile
+      pi.sendUserMessage(
+        `Continue working toward the active goal. Use goal_report to record progress, completion (done), or a blocker (blocked). Goal state: ${goalPath(ctx.cwd)}`,
+      );
+    }, 0);
   });
 
   // ── compaction: re-append the goal to the transcript and resume ────────────
@@ -231,15 +245,19 @@ export default function (pi: ExtensionAPI) {
       const tokens = (args ?? "").trim().split(/\s+/).filter(Boolean);
       const cmd = tokens[0] ?? "show";
       const rest = tokens.slice(1).join(" ");
+      const SUBCOMMANDS = new Set(["set", "show", "edit", "pause", "resume", "clear", "status"]);
+      // "/goal <free text>" starts a goal — alias for set
+      const isSet = cmd === "set" || !SUBCOMMANDS.has(cmd);
 
       const g = await loadGoal(ctx.cwd);
 
-      if (cmd === "set") {
-        if (!rest) {
+      if (isSet) {
+        const raw = cmd === "set" ? rest : (args ?? "").trim();
+        if (!raw) {
           ctx.ui.notify("usage: /goal set <text> [--done <criteria>] [--max-iterations N] [--budget $]", "info");
           return;
         }
-        let text = rest;
+        let text = raw;
         let definitionOfDone: string | undefined;
         let maxIterations = DEFAULT_MAX_ITERATIONS;
         let maxCostUsd: number | undefined;
@@ -251,7 +269,7 @@ export default function (pi: ExtensionAPI) {
         if (mBudget) { maxCostUsd = Number(mBudget[1]); text = text.replace(mBudget[0], "").trim(); }
         const now = Date.now();
         const goal: GoalState = {
-          text: text || rest,
+          text: text || raw,
           definitionOfDone,
           status: "active",
           progress: [],
