@@ -32,7 +32,7 @@ WITH RECURSIVE blast(id, depth) AS (...);
 
 ```bash
 # via pi (npm package)
-pi install npm:geto-graph@0.1.2
+pi install npm:geto-graph@0.2.1
 
 # or from source
 npm install
@@ -83,6 +83,16 @@ Then `/reload` in pi. The index auto-builds on first use in `<project>/.geto-gra
 npm test                      # indexes a project and runs every query:
 node packages/geto-graph/test.mjs <project-root>
 ```
+
+## Releases
+
+[Release Please](https://github.com/googleapis/release-please) manages each package independently from Conventional Commit messages that touch its package directory:
+
+- `fix:` creates a patch release.
+- `feat:` creates a minor release.
+- `feat!:` or a `BREAKING CHANGE:` footer creates a major release.
+
+Release Please opens a separate release PR for each affected package. Merging that PR updates the package version and changelog, creates a package-specific GitHub release and tag, then invokes that package's npm publishing workflow. Do not edit package versions manually.
 
 ## Architecture
 

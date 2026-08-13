@@ -1,0 +1,5 @@
+{
+  "packages/geto-graph": "0.2.1",
+  "packages/geto-subagents": "0.2.0",
+  "packages/geto-goals": "0.2.0"
+}

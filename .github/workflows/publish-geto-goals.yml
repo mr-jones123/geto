@@ -2,10 +2,15 @@
 name: Publish geto-goals
 
 "on":
-  push:
-    tags:
-      - "geto-goals-v*"
-  workflow_dispatch: {}
+  workflow_call:
+    inputs:
+      ref:
+        description: Git commit created by Release Please
+        required: true
+        type: string
+    secrets:
+      NPM_TOKEN:
+        required: true
 
 jobs:
   publish:
@@ -14,28 +19,13 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Verify tag matches package version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          expected="${GITHUB_REF_NAME#geto-goals-v}"
-          actual="$(node -p "require('./packages/geto-goals/package.json').version")"
-          if [ "$expected" != "$actual" ]; then
-            echo "::error::tag version ${expected} does not match geto-goals version ${actual}"
-            exit 1
-          fi
 
       - name: Verify package contents
         working-directory: packages/geto-goals

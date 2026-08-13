@@ -1,0 +1,54 @@
+---
+name: Release Please
+
+"on":
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      geto-graph-released: ${{ steps.release.outputs['packages/geto-graph--release_created'] }}
+      geto-graph-sha: ${{ steps.release.outputs['packages/geto-graph--sha'] }}
+      geto-subagents-released: ${{ steps.release.outputs['packages/geto-subagents--release_created'] }}
+      geto-subagents-sha: ${{ steps.release.outputs['packages/geto-subagents--sha'] }}
+      geto-goals-released: ${{ steps.release.outputs['packages/geto-goals--release_created'] }}
+      geto-goals-sha: ${{ steps.release.outputs['packages/geto-goals--sha'] }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish-geto-graph:
+    needs: release
+    if: ${{ needs.release.outputs.geto-graph-released == 'true' }}
+    uses: ./.github/workflows/publish-geto-graph.yml
+    with:
+      ref: ${{ needs.release.outputs.geto-graph-sha }}
+    secrets: inherit
+
+  publish-geto-subagents:
+    needs: release
+    if: ${{ needs.release.outputs.geto-subagents-released == 'true' }}
+    uses: ./.github/workflows/publish-geto-subagents.yml
+    with:
+      ref: ${{ needs.release.outputs.geto-subagents-sha }}
+    secrets: inherit
+
+  publish-geto-goals:
+    needs: release
+    if: ${{ needs.release.outputs.geto-goals-released == 'true' }}
+    uses: ./.github/workflows/publish-geto-goals.yml
+    with:
+      ref: ${{ needs.release.outputs.geto-goals-sha }}
+    secrets: inherit
