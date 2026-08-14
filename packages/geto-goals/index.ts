@@ -279,6 +279,14 @@ export default function (pi: ExtensionAPI) {
         };
         const file = await saveGoal(ctx.cwd, goal);
         ctx.ui.notify(`goal set — active. File: ${file}\nThe agent loop will continue autonomously until done, blocked, paused, or budget/iteration limits.`, "info");
+        // Kick off the first iteration immediately (Codex /goal behavior): when
+        // idle, start the agent now; when streaming, the agent_settled handler
+        // picks the goal up after the current run settles.
+        if (ctx.isIdle()) {
+          pi.sendUserMessage(
+            `A new goal is active. Start working on it now. Use goal_report to record progress, completion (done), or a blocker (blocked). Goal state: ${goalPath(ctx.cwd)}`,
+          );
+        }
         return;
       }
 
