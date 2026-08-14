@@ -1,6 +1,6 @@
 {
   "name": "geto-goals",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Durable autonomous goal loop for pi (Codex /goal style). /goal set|show|edit|pause|resume|clear plus a goal_report tool and an agent_settled continuation loop. Goal state lives in .pi/goals/goal.json and is re-injected every turn, so it survives compaction, /new, and restarts.",
   "type": "module",
   "keywords": [
