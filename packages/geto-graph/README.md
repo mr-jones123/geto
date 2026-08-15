@@ -47,6 +47,8 @@ Requires pi >= 0.84 (declared as a peer dependency).
 ## Supported files
 
 - `.ts/.tsx/.js/.jsx/.mts/.cts` — tree-sitter (WASM) full symbol + call/type/import graph
+- `.py` — tree-sitter (WASM) defs, classes, methods, typed signatures, docstrings
+- `.cpp/.cc/.cxx/.c++/.c` + `.h/.hpp/.hh/.hxx/.h++/.inl/.ipp` — tree-sitter (WASM): namespaces, classes/structs, scoped enums, macros, typedefs/aliases, out-of-line definitions, `#include` graph, calls, type uses
 - `.yaml/.yml` — structural key-path scanner (`services.web.image`)
 - `Dockerfile`/`Containerfile` — instruction scanner
 
