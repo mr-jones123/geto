@@ -31,7 +31,18 @@ jobs:
         working-directory: packages/geto-goals
         run: npm pack --dry-run
 
+      - name: Skip if version already published
+        id: check-published
+        working-directory: packages/geto-goals
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          if npm view geto-goals@"$VER" version >/dev/null 2>&1; then
+            echo "geto-goals@$VER already on npm — skipping publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish geto-goals to npm
+        if: steps.check-published.outputs.skip != 'true'
         working-directory: packages/geto-goals
         run: npm publish --access public
         env:

@@ -31,7 +31,18 @@ jobs:
         working-directory: packages/geto-subagents
         run: npm pack --dry-run
 
+      - name: Skip if version already published
+        id: check-published
+        working-directory: packages/geto-subagents
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          if npm view geto-subagents@"$VER" version >/dev/null 2>&1; then
+            echo "geto-subagents@$VER already on npm — skipping publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish geto-subagents to npm
+        if: steps.check-published.outputs.skip != 'true'
         working-directory: packages/geto-subagents
         run: npm publish --access public
         env:

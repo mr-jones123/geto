@@ -37,7 +37,18 @@ jobs:
       - name: Run geto-graph regression tests
         run: npm test
 
+      - name: Skip if version already published
+        id: check-published
+        working-directory: packages/geto-graph
+        run: |
+          VER=$(node -p "require('./package.json').version")
+          if npm view geto-graph@"$VER" version >/dev/null 2>&1; then
+            echo "geto-graph@$VER already on npm — skipping publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish geto-graph to npm
+        if: steps.check-published.outputs.skip != 'true'
         working-directory: packages/geto-graph
         run: npm publish --access public
         env:
