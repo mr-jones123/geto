@@ -16,6 +16,32 @@ export function suite() {
 }
 `);
   writeFileSync(join(root, "config.yml"), "services:\n  web:\n    image: test\n");
+  writeFileSync(join(root, "animal.h"), `
+#ifndef ANIMAL_H
+#define ANIMAL_H
+namespace zoo {
+enum class Species { CAT, DOG };
+class Animal {
+public:
+  explicit Animal(Species s);
+  Species species() const;
+};
+Species makeSpecies(int x);
+}
+#endif
+`);
+  writeFileSync(join(root, "animal.cpp"), `
+#include "animal.h"
+#include <vector>
+namespace zoo {
+Animal::Animal(Species s) {}
+Species Animal::species() const { return Species::CAT; }
+Species makeSpecies(int x) {
+  Animal a(x > 0 ? Species::CAT : Species::DOG);
+  return a.species();
+}
+}
+`);
 
   const first = await indexProject(root);
   assert.equal(first.mode, "initial_index");
@@ -28,7 +54,7 @@ export function suite() {
   const second = await indexProject(root);
   assert.equal(second.mode, "incremental_reindex");
   assert.equal(second.indexed, 0);
-  assert.equal(second.skipped, 2);
+  assert.equal(second.skipped, 4);
   assert.equal(second.symbols, 0, "an incremental no-op must report no additions");
   assert.equal(second.edges, 0);
   assert.equal(second.configEntries, 0);
@@ -38,7 +64,34 @@ export function suite() {
 
   const forced = await indexProject(root, { force: true });
   assert.equal(forced.mode, "forced_reindex");
-  assert.equal(forced.indexed, 2);
+  assert.equal(forced.indexed, 4);
+
+  // C++ extraction: symbols, signatures, scoped names, cross-file includes, calls
+  {
+    const dbc = new DatabaseSync(dbPath, { readOnly: true });
+    assert.equal(dbc.prepare("SELECT COUNT(*) n FROM files WHERE language = 'cpp'").get().n, 2,
+      "cpp files must be indexed with language 'cpp'");
+    const cls = dbc.prepare("SELECT name, kind, qualified FROM symbols WHERE qualified = 'zoo.Animal'").get();
+    assert.ok(cls && cls.kind === "class", "class Animal must be extracted with scoped name zoo.Animal");
+    assert.ok(dbc.prepare("SELECT 1 FROM symbols WHERE qualified = 'zoo.Species.CAT'").get(),
+      "scoped enum members must be extracted");
+    assert.ok(dbc.prepare("SELECT 1 FROM symbols WHERE qualified = 'zoo.makeSpecies' AND signature LIKE '%int%'").get(),
+      "function signatures must capture parameter types");
+    assert.ok(dbc.prepare("SELECT 1 FROM symbols WHERE qualified = 'zoo.Animal.Animal'").get(),
+      "out-of-line constructors must land on the header method name");
+    assert.ok(dbc.prepare("SELECT 1 FROM symbols WHERE qualified = 'zoo.Animal.species'").get(),
+      "out-of-line definitions must match the header qualified name");
+    const inc = dbc.prepare(`
+      SELECT s.fully_qualified AS target FROM edges e
+      JOIN files f ON f.id = e.file_id JOIN symbols s ON s.id = e.to_id
+      WHERE f.path = 'animal.cpp' AND e.kind = 'imports' AND e.to_text = 'animal.h'`).get();
+    assert.ok(inc, "quoted includes must resolve to the header's module symbol");
+    const call = dbc.prepare(`
+      SELECT e.to_text FROM edges e JOIN files f ON f.id = e.file_id
+      WHERE f.path = 'animal.cpp' AND e.kind = 'calls' AND e.to_text LIKE '%species%'`).get();
+    assert.ok(call, "member calls must be extracted");
+    dbc.close();
+  }
 
   let db = new DatabaseSync(dbPath);
   db.prepare("UPDATE files SET hash = NULL WHERE path = 'duplicate.ts'").run();

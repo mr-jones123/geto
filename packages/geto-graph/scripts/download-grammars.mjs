@@ -12,6 +12,7 @@ mkdirSync(WASM_DIR, { recursive: true });
 const GRAMMARS = [
   { repo: "tree-sitter/tree-sitter-typescript", assets: ["tree-sitter-typescript.wasm", "tree-sitter-tsx.wasm"] },
   { repo: "tree-sitter/tree-sitter-python", assets: ["tree-sitter-python.wasm"] },
+  { repo: "tree-sitter/tree-sitter-cpp", assets: ["tree-sitter-cpp.wasm"] },
   { repo: "tree-sitter-grammars/tree-sitter-yaml", assets: ["tree-sitter-yaml.wasm"] },
 ];
 

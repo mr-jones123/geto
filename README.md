@@ -20,7 +20,7 @@ WITH RECURSIVE blast(id, depth) AS (...);
 
 ## Features
 
-- **Symbols with signatures** — functions, classes, methods, interfaces, types, enums; typed signatures (`format_comment(results_path: str)`) so the agent sees call shapes without opening files
+- **Symbols with signatures** — functions, classes, methods, interfaces, types, enums; typed signatures (`format_comment(results_path: str)`, `PvzpFoleyInitialize((const FoleyParams*, int))`) so the agent sees call shapes without opening files
 - **Edges** — `imports`, `calls`, `extends`, `implements`, `uses` (type references), resolved to in-repo targets where possible
 - **BM25 full-text search** over symbol names, signatures, and doc comments
 - **Blast radius** — recursive-CTE BFS (reverse/forward, depth-limited, scope-filtered) for impact analysis
@@ -67,6 +67,7 @@ Then `/reload` in pi. The index auto-builds on first use in `<project>/.geto-gra
 |---|---|
 | `.ts/.tsx/.js/.jsx/.mts/.cts` | tree-sitter (WASM): symbols + calls + type uses + imports |
 | `.py` | tree-sitter (WASM): defs, classes, methods, typed signatures, docstrings |
+| `.cpp/.cc/.cxx/.c++/.c` + `.h/.hpp/.hh/.hxx/.h++/.inl/.ipp` | tree-sitter (WASM): namespaces, classes/structs, scoped enums, macros, typedefs/aliases, out-of-line definitions, `#include` graph (quoted includes resolve across files), calls, type uses |
 | `.yaml/.yml` | structural key-path scanner |
 | `Dockerfile`/`Containerfile` | instruction scanner |
 

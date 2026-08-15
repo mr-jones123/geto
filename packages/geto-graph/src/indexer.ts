@@ -6,6 +6,7 @@ import { openDb, rebuildFts, readMeta, writeMeta, SCHEMA_VERSION } from "./db.ts
 import { getParser } from "./grammars.ts";
 import { extractTs, type Extraction } from "./extract-ts.ts";
 import { extractPy } from "./extract-py.ts";
+import { extractCpp } from "./extract-cpp.ts";
 import { scanYaml, scanDockerfile, type ConfigEntry } from "./scanners.ts";
 
 export const DB_DIR = ".geto-graph";
@@ -27,6 +28,18 @@ const LANG_BY_EXT: Record<string, { lang: string; grammar: string }> = {
   ".js":   { lang: "typescript", grammar: "ts" },
   ".jsx":  { lang: "typescript", grammar: "tsx" },
   ".py":   { lang: "python", grammar: "python" },
+  ".cpp":  { lang: "cpp", grammar: "cpp" },
+  ".cc":   { lang: "cpp", grammar: "cpp" },
+  ".cxx":  { lang: "cpp", grammar: "cpp" },
+  ".c++":  { lang: "cpp", grammar: "cpp" },
+  ".c":    { lang: "cpp", grammar: "cpp" },
+  ".h":    { lang: "cpp", grammar: "cpp" },
+  ".hpp":  { lang: "cpp", grammar: "cpp" },
+  ".hh":   { lang: "cpp", grammar: "cpp" },
+  ".hxx":  { lang: "cpp", grammar: "cpp" },
+  ".h++":  { lang: "cpp", grammar: "cpp" },
+  ".inl":  { lang: "cpp", grammar: "cpp" },
+  ".ipp":  { lang: "cpp", grammar: "cpp" },
   ".yaml": { lang: "yaml", grammar: "yaml" },
   ".yml":  { lang: "yaml", grammar: "yaml" },
 };
@@ -143,6 +156,9 @@ async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: 
     } else if (grammar === "python") {
       const parser = await getParser("python");
       insertSymbolsAndEdges(db, fileId, f, extractPy(src, parser, f.rel), insSym, insEdge, stats);
+    } else if (grammar === "cpp") {
+      const parser = await getParser("cpp");
+      insertSymbolsAndEdges(db, fileId, f, extractCpp(src, parser, f.rel), insSym, insEdge, stats);
     } else {
       const parser = await getParser(grammar as "ts" | "tsx");
       insertSymbolsAndEdges(db, fileId, f, extractTs(src, parser, f.rel), insSym, insEdge, stats);
@@ -302,6 +318,19 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
 
   const TS_EXTS = ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".d.ts", "/index.ts", "/index.tsx", "/index.js", "/index.jsx"];
   const PY_EXTS = [".py", "/__init__.py", ".pyi"];
+  const CPP_EXTS = ["", ".h", ".hpp", ".hh", ".hxx", ".h++", ".inl", ".ipp", ".cpp", ".cc", ".cxx", ".c++", ".c"];
+
+  // path-normalize that resolves ".." (C++ includes are relative and can climb)
+  const normPath = (p: string) => {
+    const parts = p.split("/");
+    const out: string[] = [];
+    for (const part of parts) {
+      if (!part || part === ".") continue;
+      if (part === "..") { out.pop(); continue; }
+      out.push(part);
+    }
+    return out.join("/");
+  };
 
   const resolveImport = (baseDir: string, src: string, lang: string): number | null => {
     let base: string;
@@ -329,6 +358,29 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
         }
         return null;
       }
+    } else if (lang === "cpp") {
+      // quoted "..." includes resolve relative to the including file first;
+      // angle-bracket <...> (kept by the extractor) resolve against include roots.
+      // Both fall back to the repo root and common include dirs.
+      const angle = src.startsWith("<");
+      const clean = angle ? src.slice(1, -1) : src;
+      const dot = clean.lastIndexOf(".");
+      const slash = clean.lastIndexOf("/");
+      const stem = dot > slash + 1 ? clean.slice(0, dot) : clean;
+      const candidates = new Set<string>([clean]);
+      for (const ext of CPP_EXTS) candidates.add(stem + ext);
+      const bases = [
+        ...(angle ? [] : [baseDir]),
+        "", "include", "src", "source", "lib", "inc",
+      ];
+      for (const b of bases) {
+        for (const cand of candidates) {
+          const key = b ? normPath(b + "/" + cand) : normPath(cand);
+          const fid = pathToFile.get(key);
+          if (fid !== undefined) return fid;
+        }
+      }
+      return null;
     } else {
       if (!src.startsWith(".")) return null; // bare package / alias — external
       exts = TS_EXTS;

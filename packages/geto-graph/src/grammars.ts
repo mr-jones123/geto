@@ -17,6 +17,7 @@ const GRAMMARS = {
   tsx:  { wasm: "tree-sitter-tsx.wasm" },
   python: { wasm: "tree-sitter-python.wasm" },
   yaml: { wasm: "tree-sitter-yaml.wasm" },
+  cpp:  { wasm: "tree-sitter-cpp.wasm" },
 } as const;
 
 export type GrammarId = keyof typeof GRAMMARS;
