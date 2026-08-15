@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/mr-jones123/geto/compare/geto-graph-v0.3.0...geto-graph-v0.4.0) (2026-08-15)
+
+
+### Features
+
+* **geto-graph:** index C/C++ via tree-sitter-cpp wasm ([135af02](https://github.com/mr-jones123/geto/commit/135af021cf1ad4845cf6825bf11e1a74e582e545))
+
 ## [0.3.0](https://github.com/mr-jones123/geto/compare/geto-graph-v0.2.2...geto-graph-v0.3.0) (2026-08-15)
 
 
