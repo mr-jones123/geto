@@ -8,7 +8,7 @@ export function registerCommand(pi: ExtensionAPI) {
   pi.registerCommand("geto-graph", {
     description: "Rebuild or inspect the codebase symbol index. Usage: /geto-graph reindex [--force] [path], /geto-graph status",
     getArgumentCompletions(prefix: string) {
-      const opts = ["reindex", "reindex --force", "status"];
+      const opts = ["reindex", "reindex --force", "status", "errors"];
       return opts.filter((o) => o.startsWith(prefix)).map((o) => ({ value: o, label: o }));
     },
     handler: async (args, ctx) => {
@@ -49,7 +49,28 @@ export function registerCommand(pi: ExtensionAPI) {
         }
         return;
       }
-      ctx.ui.notify("geto-graph: unknown subcommand. Use 'reindex [--force] [path]' or 'status'.", "info");
+      if (cmd === "errors") {
+        const dbPath = join(ctx.cwd, DB_DIR, DB_FILE);
+        if (!existsSync(dbPath)) {
+          ctx.ui.notify("geto-graph: not indexed yet. Run '/geto-graph reindex' or use any geto_graph_* tool to build the index.", "info");
+          return;
+        }
+        const db = openDb(dbPath);
+        const rows = db.prepare(`
+          SELECT file, message, created_at FROM index_errors
+          UNION ALL
+          SELECT f.path, f.reason, f.indexed_at FROM files f
+          WHERE f.status = 'parse_error' AND NOT EXISTS (SELECT 1 FROM index_errors ie WHERE ie.file = f.path)
+          ORDER BY created_at DESC LIMIT 20
+        `).all() as { file: string; message: string; created_at: number | null }[];
+        const total = (db.prepare("SELECT COUNT(*) AS n FROM files WHERE status = 'parse_error'").get() as { n: number }).n;
+        db.close();
+        if (!total) { ctx.ui.notify("geto-graph: no indexing errors.", "info"); return; }
+        const sample = rows.map((r) => `${r.file} => ${r.message}`).join("\n");
+        ctx.ui.notify(`geto-graph: ${total} files with indexing errors${rows.length < total ? ` (showing first ${rows.length})` : ""}:\n${sample}`, "error");
+        return;
+      }
+      ctx.ui.notify("geto-graph: unknown subcommand. Use 'reindex [--force] [path]', 'status', or 'errors'.", "info");
     },
   });
 }

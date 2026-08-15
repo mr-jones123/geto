@@ -2,5 +2,8 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# local pi agent session state
+.pi/
+
 # per-project indexes created by the geto-graph extension
 .geto-graph/

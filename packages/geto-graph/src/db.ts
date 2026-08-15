@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-export const SCHEMA_VERSION = "2";
+export const SCHEMA_VERSION = "3";
 
 export function openDb(dbPath: string): DatabaseSync {
   mkdirSync(dirname(dbPath), { recursive: true }); // DB dir may not exist yet
@@ -77,6 +77,14 @@ CREATE TABLE IF NOT EXISTS config_entries (
   line    INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_config_file ON config_entries(file_id);
+
+CREATE TABLE IF NOT EXISTS index_errors (
+  id         INTEGER PRIMARY KEY,
+  file       TEXT NOT NULL,
+  message    TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_index_errors_file ON index_errors(file);
 `);
   return db;
 }

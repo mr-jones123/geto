@@ -83,6 +83,18 @@ function sha1Hex(data: Buffer | string): string {
   return createHash("sha1").update(data).digest("hex");
 }
 
+// Persistent, agent-readable error log: one row per file, replaced on each
+// re-index attempt so it always reflects the file's current state. Cleared
+// when a file indexes successfully or is removed.
+function logIndexError(db: DatabaseSync, file: string, message: string) {
+  db.prepare("DELETE FROM index_errors WHERE file = ?").run(file);
+  db.prepare("INSERT INTO index_errors (file, message, created_at) VALUES (?,?,?)").run(file, message, Date.now());
+}
+
+function clearIndexError(db: DatabaseSync, file: string) {
+  db.prepare("DELETE FROM index_errors WHERE file = ?").run(file);
+}
+
 async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: IndexSummary, buf?: Buffer, hash?: string) {
   const st = statSync(f.abs);
   const lang = f.isDockerfile ? "dockerfile" : LANG_BY_EXT[f.ext].lang;
@@ -99,7 +111,7 @@ async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: 
   }
 
   let srcBuf: Buffer;
-  try { srcBuf = buf ?? readFileSync(f.abs); } catch { return; }
+  try { srcBuf = buf ?? readFileSync(f.abs); } catch (err) { logIndexError(db, f.rel, `cannot read file: ${String(err)}`); return; }
   const contentHash = hash ?? sha1Hex(srcBuf);
   const src = srcBuf.toString("utf8");
 
@@ -137,12 +149,15 @@ async function reindexFile(db: DatabaseSync, root: string, f: FileEntry, stats: 
     }
     db.exec("COMMIT");
     stats.indexed++;
+    clearIndexError(db, f.rel); // file now indexes cleanly — drop its error
   } catch (err) {
     db.exec("ROLLBACK");
     stats.symbols = before.symbols;
     stats.edges = before.edges;
     stats.configEntries = before.configEntries;
-    db.prepare("UPDATE files SET status = 'parse_error', reason = ? WHERE id = ?").run(String(err).slice(0, 200), fileId);
+    const msg = String(err);
+    db.prepare("UPDATE files SET status = 'parse_error', reason = ? WHERE id = ?").run(msg.slice(0, 200), fileId);
+    logIndexError(db, f.rel, msg);
     stats.parseErrors++;
   }
 }
@@ -253,7 +268,7 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
     let buf: Buffer | undefined;
     let hash: string | undefined;
     if (!opts.force && row?.hash && st.size <= MAX_FILE) {
-      try { buf = readFileSync(f.abs); hash = sha1Hex(buf); } catch { continue; }
+      try { buf = readFileSync(f.abs); hash = sha1Hex(buf); } catch (err) { logIndexError(db, f.rel, `cannot read file: ${String(err)}`); continue; }
       if (hash === row.hash && row.status !== "parse_error") {
         updMeta.run(st.mtimeMs, st.size, f.rel); // touched but unchanged
         stats.skipped++;
@@ -267,7 +282,7 @@ export async function indexProject(root: string, opts: { dbPath?: string; force?
   const known = new Set(files.map((f) => f.rel));
   const stale = db.prepare("SELECT id, path FROM files").all() as { id: number; path: string }[];
   for (const s of stale) {
-    if (!known.has(s.path)) { db.prepare("DELETE FROM files WHERE id = ?").run(s.id); stats.removed++; }
+    if (!known.has(s.path)) { db.prepare("DELETE FROM files WHERE id = ?").run(s.id); clearIndexError(db, s.path); stats.removed++; }
   }
 
   // resolve cross-file imports: to_id = target module symbol

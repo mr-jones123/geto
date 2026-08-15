@@ -336,6 +336,7 @@ export function registerTools(pi: ExtensionAPI) {
         `${indexModeLabel(s)} for ${s.root}`,
         `${s.filesFound} files found — ${s.indexed} indexed, ${s.skipped} up-to-date, ${s.removed} removed, ${s.parseErrors} errors this run`,
         `→ index contains ${s.totalSymbols} symbols, ${s.totalEdges} edges, ${s.totalConfigEntries} config entries (${s.totalParseErrors} files with errors)`,
+        ...(s.parseErrors > 0 ? [`→ ${s.parseErrors} files failed — run geto_graph_errors to see which and why`] : []),
         `→ this run added ${s.symbols} symbols, ${s.edges} edges, ${s.configEntries} config entries (${Date.now() - t0}ms)`,
       ].join("\n");
       return { content: [{ type: "text", text: truncate(text) }], details: { summary: s } };
@@ -356,9 +357,44 @@ export function registerTools(pi: ExtensionAPI) {
         `${indexModeLabel(s)} for ${s.root}`,
         `${s.filesFound} files — ${s.indexed} indexed, ${s.skipped} skipped, ${s.removed} removed, ${s.parseErrors} errors`,
         `→ index contains ${s.totalSymbols} symbols, ${s.totalEdges} edges, ${s.totalConfigEntries} config entries (${s.totalParseErrors} files with errors)`,
+        ...(s.parseErrors > 0 ? [`→ ${s.parseErrors} files failed — run geto_graph_errors to see which and why`] : []),
         `→ this run added ${s.symbols} symbols, ${s.edges} edges, ${s.configEntries} config entries (${Date.now() - t0}ms)`,
       ].join("\n");
       return { content: [{ type: "text", text: truncate(text) }], details: { summary: s } };
+    },
+  });
+
+  pi.registerTool({
+    name: "geto_graph_errors",
+    label: "Geto Graph Errors",
+    description:
+      "Files that failed to parse or read during indexing, with the full error message per file. Run when geto_graph_index or geto_graph_reindex reports errors to see exactly which files failed and why.",
+    promptSnippet: "Read indexing errors (which files failed to parse and why)",
+    promptGuidelines: [
+      "When an index run reports parse errors, run geto_graph_errors to see which files failed and the exact error message.",
+      "Fix the underlying cause, then run geto_graph_index to re-attempt those files.",
+    ],
+    parameters: Type.Object({
+      limit: Type.Optional(Type.Integer({ default: 50, minimum: 1, maximum: 500 })),
+    }),
+    async execute(_id, params, _signal, _onUpdate, ctx) {
+      const db = await ensureIndexed(ctx.cwd);
+      // current structured log + legacy rows (pre-log files marked parse_error)
+      const rows = db.prepare(`
+        SELECT file, message, created_at FROM index_errors
+        UNION ALL
+        SELECT f.path, f.reason, f.indexed_at FROM files f
+        WHERE f.status = 'parse_error' AND NOT EXISTS (SELECT 1 FROM index_errors ie WHERE ie.file = f.path)
+        ORDER BY created_at DESC LIMIT ?
+      `).all(params.limit ?? 50) as unknown as { file: string; message: string; created_at: number | null }[];
+      if (!rows.length) return { content: [{ type: "text", text: "No indexing errors." }], details: { count: 0 } };
+      const lines = rows.map((r) => {
+        const when = r.created_at ? new Date(Number(r.created_at)).toISOString().slice(0, 19) + "Z" : "unknown";
+        const msg = r.message.length > 500 ? r.message.slice(0, 500) + "…" : r.message;
+        return `${r.file}\n  ${when} — ${msg}`;
+      });
+      const text = `${rows.length} file(s) with indexing errors:\n` + lines.join("\n");
+      return { content: [{ type: "text", text: truncate(text) }], details: { count: rows.length } };
     },
   });
 
@@ -369,8 +405,8 @@ export function registerTools(pi: ExtensionAPI) {
     parameters: Type.Object({}),
     async execute(_id, _params, _signal, _onUpdate, ctx) {
       const db = await ensureIndexed(ctx.cwd);
-      const t = db.prepare("SELECT (SELECT COUNT(*) FROM files) AS files, (SELECT COUNT(*) FROM symbols) AS symbols, (SELECT COUNT(*) FROM edges) AS edges, (SELECT COUNT(*) FROM config_entries) AS configs, (SELECT value FROM meta WHERE key='indexed_at') AS at, (SELECT value FROM meta WHERE key='root') AS root").get() as unknown as { files: number; symbols: number; edges: number; configs: number; at: string | null; root: string | null };
-      const text = `index root: ${t.root}\nfiles: ${t.files}\nsymbols: ${t.symbols}\nedges: ${t.edges}\nconfig entries: ${t.configs}\nindexed at: ${t.at ? new Date(Number(t.at)).toISOString() : "never"}`;
+      const t = db.prepare("SELECT (SELECT COUNT(*) FROM files) AS files, (SELECT COUNT(*) FROM symbols) AS symbols, (SELECT COUNT(*) FROM edges) AS edges, (SELECT COUNT(*) FROM config_entries) AS configs, (SELECT COUNT(*) FROM files WHERE status='parse_error') AS errors, (SELECT value FROM meta WHERE key='indexed_at') AS at, (SELECT value FROM meta WHERE key='root') AS root").get() as unknown as { files: number; symbols: number; edges: number; configs: number; errors: number; at: string | null; root: string | null };
+      const text = `index root: ${t.root}\nfiles: ${t.files}\nsymbols: ${t.symbols}\nedges: ${t.edges}\nconfig entries: ${t.configs}\nparse errors: ${t.errors}${t.errors ? " — run geto_graph_errors for details" : ""}\nindexed at: ${t.at ? new Date(Number(t.at)).toISOString() : "never"}`;
       return { content: [{ type: "text", text }], details: { t } };
     },
   });

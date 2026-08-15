@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { indexProject } from "./src/indexer.ts";
@@ -65,6 +65,29 @@ export function suite() {
   assert.ok(file.hash, "hash backfill must resolve paths against the indexed root");
   assert.equal(meta.symbol_count, totals.symbols, "metadata must store persisted totals");
   assert.equal(meta.edge_count, totals.edges);
+
+  // indexing errors must be logged so an agent can read them, and cleared on recovery
+  if (typeof process.getuid !== "function" || process.getuid() !== 0) {
+    const bad = join(root, "broken.ts");
+    writeFileSync(bad, "export const fine = 1;\n");
+    chmodSync(bad, 0o000);
+    try {
+      const withErr = await indexProject(root);
+      assert.ok(withErr.totalParseErrors >= 0);
+      const dbe = new DatabaseSync(dbPath, { readOnly: true });
+      const errRows = dbe.prepare("SELECT file, message FROM index_errors").all();
+      dbe.close();
+      assert.ok(errRows.some((r) => r.file === "broken.ts" && String(r.message).startsWith("cannot read file")),
+        "unreadable file must be logged in index_errors");
+    } finally {
+      chmodSync(bad, 0o644);
+    }
+    await indexProject(root, { force: true });
+    const dbe2 = new DatabaseSync(dbPath, { readOnly: true });
+    const errRows2 = dbe2.prepare("SELECT file FROM index_errors").all();
+    dbe2.close();
+    assert.ok(!errRows2.some((r) => r.file === "broken.ts"), "successful reindex must clear the file's error");
+  }
 
   console.log("geto-graph regression checks passed");
 } finally {
